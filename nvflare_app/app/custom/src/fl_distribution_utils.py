@@ -1,4 +1,7 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
 import logging
 
 
@@ -14,6 +17,7 @@ def synthesize_equal_dirichlet_client_data_distribution(labels, n_clients: int, 
     :param val_ratio: Ratio of the data points to be used for validation.
     :return: Dictionary with client IDs as keys and the corresponding indices.
     """
+    labels = np.array(labels)
     n_classes = len(np.unique(labels))
     logging.debug(f"Number of classes: {n_classes}")
     n_samples_per_client = int(len(labels) / n_clients)
@@ -72,26 +76,13 @@ def synthesize_equal_dirichlet_client_data_distribution(labels, n_clients: int, 
 
     return client_data_distributions
 
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.WARNING)
-    labels = np.random.randint(0, 2, 1000)
-    n_clients = 2
-    alpha = 0.1  # high alpha means more uniform distribution (closer to IID)
-    val_ratio = 0.1
-    client_data_distributions = synthesize_equal_dirichlet_client_data_distribution(labels, n_clients, alpha, val_ratio)
-    print(client_data_distributions)
-    print("All clients: ", client_data_distributions.keys())
-    for client in client_data_distributions.keys():
-        print(
-            f"Client {client}: {len(client_data_distributions[client]['train'])} training samples, {len(client_data_distributions[client]['val'])} validation samples")
-        print(f"Client {client} training samples: {client_data_distributions[client]['train']}")
-
-    # create a barplot of the data distribution by mapping the assigned indices back to the labels
-    import matplotlib.pyplot as plt
-    import pandas as pd
-    import seaborn as sns
-
+def create_plot_of_distributions(client_data_distributions, labels, save_path=None):
+    """
+    Create a barplot of the data distribution by mapping the assigned indices back to the labels.
+    :param client_data_distributions: Dictionary with client IDs as keys and the corresponding indices.
+    :param labels: List-like object with the labels. The labels must be integers starting from 0, and the i-th label corresponds to the i-th data point.
+    :return:
+    """
     data = []
     for client in client_data_distributions.keys():
         train_labels = labels[client_data_distributions[client]['train']]
@@ -106,4 +97,27 @@ if __name__ == '__main__':
     df.columns = ['client', 'split', 'class', 'count']
     sns.set_style('whitegrid')
     g = sns.catplot(x='client', y='count', hue='class', col='class', row='split', data=df, kind='bar', sharey=False)
-    plt.show()
+
+    if save_path is not None:
+        g.savefig(save_path)
+    else:
+        plt.show()
+
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.WARNING)
+    labels = np.random.randint(0, 10, 1000)
+    print(f"Type of labels: {type(labels)}")
+    n_clients = 10
+    alpha = 0.1  # high alpha means more uniform distribution (closer to IID)
+    val_ratio = 0.1
+    client_data_distributions = synthesize_equal_dirichlet_client_data_distribution(labels, n_clients, alpha, val_ratio)
+    print(client_data_distributions)
+    print("All clients: ", client_data_distributions.keys())
+    for client in client_data_distributions.keys():
+        print(
+            f"Client {client}: {len(client_data_distributions[client]['train'])} training samples, {len(client_data_distributions[client]['val'])} validation samples")
+        print(f"Client {client} training samples: {client_data_distributions[client]['train']}")
+
+    # create a barplot of the data distribution by mapping the assigned indices back to the labels
+    create_plot_of_distributions(client_data_distributions, labels, save_path='client_data_distribution_test.png')

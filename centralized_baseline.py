@@ -1,43 +1,15 @@
 import torch
 
 import argparse
-import logging
 import os
 
-from nvflare_app.app.custom.src.utils import get_model, get_data_centralized, save_pt_model
+from nvflare_app.app.custom.src.utils import create_logger, get_model, get_data_centralized, save_pt_model
 from nvflare_app.app.custom.src.eval_utils import evaluate_accuracy
-
-def create_logger(add_filehandler=True,
-                  format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') -> logging.Logger:
-    """
-    Create a logger.
-    :param add_filehandler: Specify whether to add a filehandler to the logger.
-    :param format: Specify the format of the log messages.
-    :return: Logger object with the specified format and filehandler.
-    """
-    # initialize logging
-    logger = logging.getLogger(__name__)
-    # set logging level
-    logger.setLevel(logging.INFO)
-    # define formatter
-    formatter = logging.Formatter(format)
-
-    # add formatter to stream handler
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
-
-    # add filehandler to logger
-    if add_filehandler:
-        file_handler = logging.FileHandler('centralized_baseline.log')
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-    return logger
 
 
 if __name__ == "__main__":
     # initialize logging
-    logger = create_logger(add_filehandler=True)
+    logger = create_logger(file_name=os.path.abspath('./centralized_baseline.log'))
 
     # Define command line arguments
     parser = argparse.ArgumentParser(description='PyTorch centralized learning baseline')
@@ -47,8 +19,10 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=0.001, help='Learning rate')
     parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility')
-    parser.add_argument('--early_stopping_rounds', type=int, default=10, help='Number of epochs to wait before early stopping')
-    parser.add_argument('--log_interval', type=int, default=1000, help='Number of batches to wait before logging training status')
+    parser.add_argument('--early_stopping_rounds', type=int, default=10,
+                        help='Number of epochs to wait before early stopping')
+    parser.add_argument('--log_interval', type=int, default=1000,
+                        help='Number of batches to wait before logging training status')
 
     # use GPU if available
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -76,10 +50,9 @@ if __name__ == "__main__":
     model = get_model(dataset_name)
     model.to(device)
 
-    #logger.info(f'Summary of the model: {torchsummary.summary(model, (3, 32, 32))}')
+    # logger.info(f'Summary of the model: {torchsummary.summary(model, (3, 32, 32))}')
     train_loader, val_loader, test_loader = get_data_centralized(dataset_name, batch_size,
                                                                  root_dir=os.path.abspath('./data/centralized'))
-
 
     # define loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss()
@@ -105,7 +78,8 @@ if __name__ == "__main__":
             if i % log_interval == log_interval - 1:
                 train_accuracy = evaluate_accuracy(model, train_loader, device)
                 val_accuracy = evaluate_accuracy(model, val_loader, device)
-                logger.info(f"[{epoch + 1}, {i + 1}] loss: {loss.item()} train accuracy: {train_accuracy:.4f} val accuracy: {val_accuracy:.4f}")
+                logger.info(
+                    f"[{epoch + 1}, {i + 1}] loss: {loss.item()} train accuracy: {train_accuracy:.4f} val accuracy: {val_accuracy:.4f}")
         # Implement early stopping here if needed
         new_val_accuracy = evaluate_accuracy(model, val_loader, device)
         if new_val_accuracy > cur_val_accuracy:
@@ -114,7 +88,8 @@ if __name__ == "__main__":
             logger.info(f"Validation accuracy improved to {cur_val_accuracy}")
         else:
             n_epochs_without_improvement += 1
-            logger.info(f"Validation accuracy did not improve. Number of epochs without improvement: {n_epochs_without_improvement}")
+            logger.info(
+                f"Validation accuracy did not improve. Number of epochs without improvement: {n_epochs_without_improvement}")
             if n_epochs_without_improvement >= args.early_stopping_rounds:
                 logger.info(f"Early stopping after epoch {epoch + 1}")
                 break
