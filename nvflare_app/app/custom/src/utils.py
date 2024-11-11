@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 
 import torchvision
 import torchvision.transforms as transforms
@@ -7,7 +8,9 @@ import torch
 
 # make sure the import works regardless from where the code is called
 from .le_net_cifar10 import LeNetCifar10
+from .pt_constants import PATH_TO_DATA_DISTRIBUTED_DIR, PT_DATALOADER_NUM_WORKERS, PATH_TO_DATA_CENTRALIZED_DIR
 import torch.nn as nn
+
 
 def create_logger(file_name=None,
                   msg_format='%(asctime)s - %(name)s - %(levelname)s - %(message)s') -> logging.Logger:
@@ -60,6 +63,7 @@ def get_loss(name: str):
     else:
         raise ValueError(f"Loss function {name} not found")
 
+
 def get_torch_datasets(dataset_name: str, root_dir: str, apply_transforms: bool = True) -> tuple:
     """
     Creates the train and test datasets for the given dataset name
@@ -98,6 +102,7 @@ def get_torch_datasets(dataset_name: str, root_dir: str, apply_transforms: bool 
 
     return trainset, testset
 
+
 def get_data_centralized(dataset_name: str, batch_size: int, root_dir: str, val_size: float = 0.1,
                          apply_transforms: bool = True) -> tuple:
     """
@@ -118,14 +123,63 @@ def get_data_centralized(dataset_name: str, batch_size: int, root_dir: str, val_
         raise ValueError(f"Dataset {dataset_name} not found")
 
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                             shuffle=False, num_workers=2)
+                                             shuffle=False, num_workers=PT_DATALOADER_NUM_WORKERS)
 
     valloader = torch.utils.data.DataLoader(valset, batch_size=batch_size,
-                                            shuffle=False, num_workers=2)
+                                            shuffle=False, num_workers=PT_DATALOADER_NUM_WORKERS)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                              shuffle=True, num_workers=2)
+                                              shuffle=True, num_workers=PT_DATALOADER_NUM_WORKERS)
 
     return trainloader, valloader, testloader
+
+
+def get_data_federated(dataset_name: str, batch_size: int, root_dir: str, client_id: int, alpha: float,
+                       val_ratio: float) -> tuple:
+    """
+    Get the data for federated learning. The function loads the data from the centralized dataset and subsets it according to the client's indices.
+    The indices are loaded from the client_data_distributions.pkl file, which is created by the create_distributed_datasets.py script and assumed to exist.
+
+    :param dataset_name: Name of the dataset.
+    :param batch_size: Batch size.
+    :param root_dir: Where the (centralized) data is stored.
+    :param client_id: Name of the client.
+    :param alpha: Dirichlet distribution parameter. Will be used to determine the path to the client_data_distributions.pkl file.
+    :param val_ratio: Ratio of the data points to be used for validation. Will be used to determine the path to the client_data_distributions.pkl file.
+    :return: Tuple with train and test data.
+    """
+    if dataset_name == 'CIFAR10':
+        # the actual testset will be used for centralized evaluation
+        trainset, _ = get_torch_datasets(dataset_name, root_dir, apply_transforms=True)
+        trainset_no_transform, _ = get_torch_datasets(dataset_name, root_dir, apply_transforms=False)
+    else:
+        raise ValueError(f"Dataset {dataset_name} not found")
+
+    path_to_client_inds = os.path.join(PATH_TO_DATA_DISTRIBUTED_DIR, dataset_name, f'alpha={alpha}_val_ratio={val_ratio}',
+                                       'client_data_distributions.pkl')
+    logging.info(f"Loading client data distributions from {path_to_client_inds}.")
+
+    # Check if the file exists
+    if not os.path.exists(path_to_client_inds):
+        raise FileNotFoundError(f"File {path_to_client_inds} not found.")
+
+    # Load the client data distributions
+    with open(path_to_client_inds, 'rb') as f:
+        client_data_distributions = pickle.load(f)
+
+    train_indices = client_data_distributions.get(client_id)['train']
+    test_indices = client_data_distributions.get(client_id)['val']
+
+    logging.info(f"Client {client_id}: {len(train_indices)} training samples, {len(test_indices)} validation samples")
+
+    trainset = torch.utils.data.Subset(trainset, train_indices)
+    testset = torch.utils.data.Subset(trainset_no_transform, test_indices)
+
+    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+                                              shuffle=True, num_workers=PT_DATALOADER_NUM_WORKERS)
+    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+                                             shuffle=False, num_workers=PT_DATALOADER_NUM_WORKERS)
+
+    return trainloader, testloader
 
 
 def save_pt_model(model, path):

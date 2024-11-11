@@ -4,6 +4,7 @@ import argparse
 import os
 
 from nvflare_app.app.custom.src.utils import create_logger, get_model, get_data_centralized, save_pt_model
+from nvflare_app.app.custom.src.pt_constants import PATH_TO_DATA_CENTRALIZED_DIR
 from nvflare_app.app.custom.src.eval_utils import evaluate_accuracy
 
 
@@ -52,13 +53,13 @@ if __name__ == "__main__":
 
     # logger.info(f'Summary of the model: {torchsummary.summary(model, (3, 32, 32))}')
     train_loader, val_loader, test_loader = get_data_centralized(dataset_name, batch_size,
-                                                                 root_dir=os.path.abspath('./data/centralized'))
+                                                                 root_dir=PATH_TO_DATA_CENTRALIZED_DIR)
 
     # define loss function and optimizer
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    #optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
     # use adam optimizer
-    # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Train the model
     cur_val_accuracy = 0

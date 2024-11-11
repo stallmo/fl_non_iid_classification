@@ -12,11 +12,11 @@ if __name__=='__main__':
     # create logger
     logger = create_logger(file_name=os.path.abspath('./fl_data_distribution_utils.log'))
 
-    # Define commmand line arguments
+    # Define command line arguments
     parser = argparse.ArgumentParser(description='Create (non-IID) client data distribution for federated learning')
     parser.add_argument('--n_clients', type=int, default=10, help='Number of clients')
     parser.add_argument('--dataset_name', type=str, default='CIFAR10', help='Name of the dataset')
-    parser.add_argument('--alpha', type=float, default=0.5, help='Dirichlet distribution parameter')
+    parser.add_argument('--alpha', type=float, default=0.1, help='Dirichlet distribution parameter')
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation ratio for each client')
     parser.add_argument('--seed', type=int, default=42, help='Seed for reproducibility')
     parser.add_argument('--create_plot', type=bool, default=True, help='Create a plot of the client data distribution')
