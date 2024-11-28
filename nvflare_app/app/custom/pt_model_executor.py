@@ -10,6 +10,8 @@ from nvflare.apis.fl_constant import ReturnCode
 
 from src.utils import get_model, get_loss, get_data_centralized
 from src.pt_constants import PATH_TO_DATA_CENTRALIZED_DIR
+from src.eval_utils import evaluate_accuracy
+
 
 
 class PtModelExecutor(Executor):
@@ -67,6 +69,16 @@ class PtModelExecutor(Executor):
                 loss.backward()
                 self._optimizer.step()
 
+    def _evaluate_model(self, fl_ctx: FLContext, weights: dict):
+        """
+        Evaluate the model on the validation data.
+        """
+        self._model.load_state_dict(weights)
+        self._model.eval()
+        val_accuracy = evaluate_accuracy(self._model, self._val_loader, self._device)
+        self.log_info(fl_ctx, f"Validation accuracy of client {fl_ctx.get_identity_name()}: {val_accuracy:.4f}")
+        return val_accuracy
+
     def share_weights(self, fl_ctx: FLContext) -> Shareable:
         """
         Share the model weights with the server.
@@ -101,6 +113,20 @@ class PtModelExecutor(Executor):
             self.share_weights(fl_ctx)
         elif task_name == 'get_weights':
             return self.share_weights(fl_ctx)
+        elif task_name == 'validate':
+            # Extract weights
+            incoming_dxo = from_shareable(shareable)
+            if not incoming_dxo.data_kind == DataKind.WEIGHTS:
+                self.log_exception(fl_ctx, f"DXO is of type {incoming_dxo.data_kind} but expected type WEIGHTS.")
+                return make_reply(ReturnCode.BAD_TASK_DATA)
+            weights = {k: torch.as_tensor(v, device=self._device) for k, v in incoming_dxo.data.items()}
+            # Evaluate the model
+            val_accuracy = self._evaluate_model(fl_ctx, weights)
+
+            outgoing_dxo = DXO(data_kind=DataKind.METRICS, data={"val_accuracy": val_accuracy})
+            return outgoing_dxo.to_shareable()
+
+
         else:
             raise ValueError(f"Unknown task name: {task_name}")
 
